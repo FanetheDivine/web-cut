@@ -1,0 +1,37 @@
+---
+alwaysApply: true
+---
+
+# 国际化与多语言
+
+## react-i18next 初始化
+
+- `src/locales/index.ts` 在应用启动时（`src/index.tsx` 直接 import）注册 `i18next`，串联 `LanguageDetector`、`initReactI18next` 以及自定义 backend。
+- 支持语言固定为 `supportedLngs = ['zh','en']`，`fallbackLng` 为 `en`，`nonExplicitSupportedLngs = false`；新增语言必须同时更新 `supportedLngs` 与 `resource/*.json`。
+- 后端 `read` 通过动态 import 加载 `src/locales/resource/{lng}.json`，若只请求单个命名空间会借助 `lodash-es/pick` 精简返回内容。
+- `LanguageDetector` 只读取 `localStorage('i18n_lang')` 与浏览器语言，缓存写回同一 key；不要在别处手动写入其它字段。
+
+## 语言资源与命名空间
+
+- JSON 结构按模块分组（例如 `common.retry`）。请保持 key 一致性，避免在组件内硬编码中文或英文。
+- `translation` 命名空间等于整包；若按命名空间拆分，确保 JSON 顶级 key 与组件调用 `t('xxx')` 相匹配。
+- 文案更新后无需重启，`i18next` 会在运行时按需加载对应语言包。
+
+## 组件内使用方式
+
+- 使用 `useTranslation()` 获取 `t` 与 `i18n`；不要绕过 hook 直接访问 `i18next` 单例。
+- 所有需要展示的字符串（含按钮、空态、错误等）都应放在 `resource` 文件，`DefaultErrorFallback`、`GlobalNotFound` 等组件已是范例。
+- 切勿在 Suspense/ErrorBoundary 之外触发异步 `i18n` 初始化，避免多次挂载。
+
+## 语言切换与 Provider
+
+- 通过 `i18n.changeLanguage(nextLng)` 切换语言；通常把用户输入写入 `localStorage('i18n_lang')` 后再调用即可。
+- `AntdProvider` 监听 `languageChanged` 事件以同步 Ant Design 组件文案与 dayjs locale，保证日期/弹窗遵循当前语言。
+- 不存在多语言路由前缀，React Router 仍使用单份路由树；若业务需要 locale 显示在 URL 中，需手动在 `~pages` 结构里新增参数化段。
+
+## 新增语言/文案指引
+
+1. 在 `src/locales/resource/` 添加新的 `{lng}.json`，复制 `common` 等命名空间。
+2. 将语言代码添加到 `supportedLngs` 与类型 `SupportedLng`。
+3. 确保 `AntdProvider` 能映射到对应的 antd/dayjs locale（若无官方包，请自定义）。
+4. 使用 `t('module.key')` 读取新文案，并针对默认错误、404 等全局组件补充翻译。

@@ -1,0 +1,42 @@
+# react + antd + tailwindcss 项目模板
+
+- `ahooks` 常见 hook
+- `immer` & `use-immer` 处理复杂、嵌套的状态
+- `zustand` 简单的全局状态管理工具
+- `zod` 类型校验工具
+- `daysjs` 日期时间处理工具
+- `swr` [管理网络请求](./useSWR.md)
+- `lodash-es` 常见函数
+- `rxjs` 处理复杂、嵌套、多状态回调函数
+- [基于文件的路由](./file-based-router.md)
+
+## utils
+
+`@/utils`里提供了常用的函数
+
+- `loadFile` 函数式加载本地文件
+- `classnames` 使用`clsx` `tailwind-merge`合并样式
+- `sleep` 等待一段时间
+- `isReactNode` 判断一个值是不是`ReactNode`
+- `withSuspense` 为`ReactNode`或者一个组件包裹`Suspense`
+- `withErrorBoundary` 为`ReactNode`或者一个组件包裹`ErrorBoundary`
+- `Rxjs` 自定义rxjs运算符和流
+
+## hooks
+
+`@/hooks`提供了常见的hook
+
+- `useImmediateEffect` 在依赖项变化后 同步地执行副作用
+- `useSemiControlledValue` 取得一个值的半受控版本 可以自由变更 且在原始值变化时突变
+- `useComposition` 处理输入法合成问题。如果需要防抖，只需要传入的 `onChange` 是一个防抖处理后的函数即可（例如使用 `ahooks` 的 `useDebounceFn` 或 `lodash-es` 的 `debounce`）
+
+## 其他
+
+- `@/styles`定义了绝对定位的样式 定义了滚动条的样式
+- `@/types`定义了常见的类型
+  - `Style` `className`和`style`的类型
+  - `ValueController` `value`&`onChange`
+  - `isFunction` 判断是不是函数
+  - `ActionType` 用于描述复杂函数的参数
+- `@/components`定义了默认的fallback组件
+- `@/locales` 国际化相关.应当以这种形式进行翻译`const { t } = useTranslation()`,否则无法正确加载数据,插件也无法捕获翻译情况

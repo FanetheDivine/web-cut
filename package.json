@@ -1,0 +1,66 @@
+{
+  "name": "react-template",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:analyze": "vite build --mode analyze",
+    "preview": "vite preview",
+    "lint": "eslint src/ ",
+    "prettier": "prettier --write src/"
+  },
+  "dependencies": {
+    "@ant-design/cssinjs": "^2.0.1",
+    "@ant-design/icons": "^6",
+    "@tailwindcss/vite": "^4.1.11",
+    "@types/lodash-es": "^4.17.12",
+    "ahooks": "^3.9.0",
+    "antd": "^6",
+    "axios": "^1.12.2",
+    "clsx": "^2.1.1",
+    "dayjs": "^1.11.13",
+    "eslint": "9",
+    "i18next": "^25.6.0",
+    "i18next-browser-languagedetector": "^8.2.0",
+    "immer": "^10.1.1",
+    "lodash-es": "^4.17.21",
+    "react": "^18",
+    "react-dom": "^18",
+    "react-error-boundary": "^6.0.0",
+    "react-i18next": "^16.2.3",
+    "react-router": "^7.7.0",
+    "rollup-plugin-visualizer": "^6.0.5",
+    "rxjs": "^7.8.2",
+    "swr": "^2.3.4",
+    "tailwind-merge": "^3.1.0",
+    "ts-pattern": "^5.8.0",
+    "use-immer": "^0.11.0",
+    "zod": "^3.24.2",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.22.0",
+    "@trivago/prettier-plugin-sort-imports": "^5.2.2",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@vitejs/plugin-react-swc": "^3.11.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "globals": "^16.3.0",
+    "prettier": "3.6.2",
+    "prettier-plugin-tailwindcss": "0.6.14",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "typescript-eslint": "^8.26.1",
+    "vite": "^6",
+    "vite-plugin-pages": "^0.33.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@swc/core"
+    ]
+  }
+}

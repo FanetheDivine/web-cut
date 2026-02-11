@@ -1,0 +1,177 @@
+---
+alwaysApply: true
+---
+
+# 编码规范
+
+## 项目规范
+
+项目的依赖、全局类型、全局hooks等参考同文件夹的 `project.mdc`.
+
+尽可能引用已有的代码而不是写新的。
+
+## 常规规范
+
+### TypeScript
+
+- `tsconfig.json` 已开启 `strict`、`noEmit`，请保持类型完整。
+- 避免 `any`；若必须使用，请注释原因。优先 `unknown` 或具体类型。
+- **优先使用 `type`** 来声明结构或工具类型；仅在需要声明合并/模块拓展时使用 `interface`。
+- 禁止使用 `enum`，请用联合字面量或对象常量。
+- 导出类型使用命名导出；局部类型就近声明。
+
+### 导入与路径
+
+导入顺序：
+
+1. React 核心
+2. 第三方库（antd、lodash 等）
+3. 内部模块（`@/components` 等）
+4. 类型导入（使用 `import type`）
+5. 相对路径
+
+使用 `@/*` 别名而非 `../../`，组件/函数需与所在目录语义一致。
+
+### 函数声明与导出
+
+- **函数类型声明**：如果函数有明确的类型，使用 `const fn: FN = xxx;` 形式；否则使用 `function` 声明。
+- **导出规范**：尽可能使用常规导出（命名导出），即 `export const` 或 `export function`。仅当页面组件（`page.tsx`、`layout.tsx`、`error.tsx`、`loading.tsx`）等基于文件路由的特殊文件时使用默认导出。
+- **默认导出**：使用默认导出时，`export default` 和值的定义必须分开，不能写成合并。
+
+### 代码质量
+
+- 每次生成或更新代码后，立即执行 `pnpm prettier`（或触发等效格式化命令）确保格式一致。
+- 生成/修改代码完成后运行执行 ESLint 检查，确保满足项目规范（尤其是 Hooks 依赖等）。
+- ESLint 强制 `react-hooks/exhaustive-deps`。
+- 复杂逻辑添加注释；公共 API/组件 Props 提供 JSDoc 或类型注释。
+
+### 数据验证与类型推断
+
+- **使用 Zod 进行数据验证**：在 API 请求处理、表单提交等场景中，使用 Zod Schema 验证输入数据，确保数据安全性和类型正确性。
+- **类型推断**：通过 `z.infer<typeof schema>` 从 Zod Schema 推断 TypeScript 类型，避免手动维护类型定义，保持运行时验证与编译时类型的一致性。
+- **常用场景**：
+  - API 请求/响应数据验证
+  - 表单数据验证
+  - 组件 Props 验证
+- **错误处理**：使用 `safeParse()` 进行验证时，妥善处理验证失败的情况，返回清晰的错误信息。
+
+## React 规范
+
+### 组件类型
+
+- 组件文件 PascalCase；hooks 使用 `useXxx` 命名。
+- **React 组件类型**：组件必须使用 `const XX: FC<XXProps> = props => { const { xx } = props }` 的形式。**组件 Props 类型必须和组件名称后缀`Props`**，例如 `Container` 组件对应 `ContainerProps`。Props 类型可以导出，格式为 `export type XXProps = Style & PropsWithChildren & { ... }`，其中 `Style` 和 `PropsWithChildren` 按需要添加。
+  - `Style` 是全局类型（定义在 `@/types/index.d.ts`），用于提供样式相关的 props（如 `className`、`style` 等），应多使用。
+  - `PropsWithChildren` 用于处理需要 `children` 的组件。
+  - 组件体内结构 `props`, `children` 在最前面,最后两个参数为`className`和`style`
+  - 使用示例：
+
+    ```typescript
+    import type { FC, PropsWithChildren } from 'react';
+
+    // 全量示例（包含 Style 和 PropsWithChildren）
+    export type ContainerProps = Style & PropsWithChildren & {
+      title?: string;
+    };
+
+    export const Container: FC<ContainerProps> = (props) => {
+      const { children, title, className, style } = props;
+      return (
+        <div className={className} style={style}>
+          {title && <h2>{title}</h2>}
+          {children}
+        </div>
+      );
+    };
+    ```
+
+### Hooks 规则
+
+- Hooks 命名以 `use` 开头并必须严格遵守 React Hooks 规则（只在顶层调用、只在 React 组件或其他 hooks 中调用、依赖列表完整）。
+- 使用项目自定义 hooks（`@/hooks`）时，请参考 `project.mdc` 中的 hooks 介绍，了解各 hook 的用途和适用场景。
+
+### 事件处理函数
+
+- **优先内联**：简单的事件处理函数优先内联编写，例如 `onClick={() => handleAction()}`。
+- **复杂逻辑独立**：如果事件处理函数相对复杂，再独立写在外面，使用 `useMemoizedFn`（来自 `ahooks`）包裹以优化性能。
+- **命名规范**：组件较多的情况下，事件处理函数名字要写全，不能只是一个简单的 `handleClick`，应该使用更具描述性的名称，例如 `handleUserFormSubmit`、`handleProductDeleteConfirm`。
+- **文档注释**：独立的事件处理函数必须添加 TSDoc 注释，描述其作用和限制，例如：
+
+  ```typescript
+  /**
+   * 处理用户表单提交
+   * @param e - 表单提交事件
+   * @remarks 提交前会进行表单验证，验证失败不会触发提交
+   */
+  const handleUserFormSubmit = useMemoizedFn((e: React.FormEvent<HTMLFormElement>) => {
+    // 处理逻辑
+  })
+  ```
+
+### 数据请求
+
+- **数据获取型请求**：对于数据获取型的网络请求，优先使用 `useSWR`，开启 `suspense` 模式，使用 `withSuspense` 和 `withErrorBoundary`（来自 `@/utils`）包裹组件，确保加载和错误状态的统一处理。
+- **提交型请求**：对于"提交"这类场景（触发型的网络请求），使用 `useRequest`（来自 `ahooks`）。提交中按钮进入 `loading` 状态。如果处于弹窗中，提交中时弹窗不能关闭。`antd`的弹窗，注意蒙层、esc键、closable属性都应当禁止关闭，取消按钮应设置为 `disabled`。
+
+### Context
+
+- React Context 的创建（`createContext`）应当放在一个独立的文件中，避免在组件文件内创建 Context，以防止热重载时 Context 被刷新导致状态丢失。
+- Context Provider 组件可以放在同一文件或单独文件中，但 Context 对象本身必须独立导出。
+
+### Lazy 组件
+
+- **必须使用 `withSuspense` 包裹**：所有使用 `React.lazy()` 创建的懒加载组件必须使用 `withSuspense`（来自 `@/utils`）包裹，确保加载状态和错误边界得到正确处理。
+- **使用示例**：
+
+  ```typescript
+  import { lazy } from 'react'
+  import { withSuspense } from '@/utils'
+
+  const LazyComponent = lazy(() => import('./Component'))
+  export const Component = withSuspense(LazyComponent)
+  ```
+
+- **禁止直接使用**：禁止在 JSX 中直接使用 `React.lazy()` 返回的组件，必须先用 `withSuspense` 包裹后再使用。
+
+### Ant Design
+
+- Ant Design 组件按需导入（`import { Button } from 'antd'`），按需引入图标并避免一次性全量导入。
+
+## 路由规范
+
+### 基于文件的路由
+
+- 项目使用 `vite-fs-router-plugin` 实现基于文件的路由系统，路由文件位于 `src/pages` 目录。
+- 合法的路由文件：`page.tsx`、`layout.tsx`、`error.tsx`、`loading.tsx`，这些文件应当默认导出一个 React 组件。
+- `layout.tsx` 应当接受 `children` 参数，使用 `<Outlet />` 渲染子路由。
+- `error.tsx` 应当默认导出类型为 `FC<FallbackProps>` 的组件以接受 `ErrorBoundary` 提供的错误信息。不要使用 `useRouteError`。
+- `loading.tsx` 用于 Suspense 的 fallback 组件。
+- 如果没有相应的文件就不会构造对应的层级。例如没有 `error`，`ErrorBoundary` 就不存在，连 `page` 也可以没有。
+- `src/pages` 对应于路由 `/`，其子文件夹的路由则是相对 `src/pages` 的路径。
+- 404 页面在 `src/index.tsx` 中全局唯一，通过 `path: '*'` 路由处理。
+- 动态路由参数：`src/pages/[id]/page.tsx` 对应路径 `/:id`，可通过 `useParams()` 获取参数。
+- 剩余参数：`src/pages/[...]/page.tsx` 表示接受剩余全部路径参数，通过 `useParams()` 获取 `{ '*': rest }`。
+- 功能性路由：用括号包裹的路由不会增加路径，例如 `src/pages/(withAuth)/test/page.tsx` 对应的路径依旧是 `/test`。功能性路由和它上一级路由的 `page` 会冲突。
+- 导入方式：只有 `src/pages` 的 `layout`、`error`、`loading` 是静态导入，其余是动态导入。
+- 默认 error 和 loading：`@/lib/createReactRoutes` 的第 2、3 个参数用于指定默认的 `error` 和 `loading`。
+
+## 样式使用规范
+
+- 优先 Tailwind 工具类；合并 `className` 时调用 `@/utils` 导出的 `cn`（`clsx + tailwind-merge` 包装）。
+- Tailwind 使用细则：
+  1. 简单样式（词数 ≤ 3，如 `m-0`、`max-h-full`）尽量使用 Tailwind；若组合过长，可按语义拆组（如布局类一组、边框类一组）并用 `cn` 拼接。
+  2. 凡是 CSS 属性值包含空格的样式（例如 `box-shadow`、`grid-column: span 1 / -1`）不使用 Tailwind，可放入 CSS Modules 以获得更好的提示。
+  3. 若组件只有极少数复杂样式（如单个 `grid-column: 1 / -1`），可用 `style` 内联；但 `grid-column: span 1 / -1`、`box-shadow` 等需写在 CSS 中。带空格的复杂样式原则上都放 CSS，只有可拆分为多个简单属性（如 padding 的 `pl-*`、`pr-*`）才可以继续使用 Tailwind。
+- 对于复杂视觉效果（自定义阴影、渐变背景、网格列、精细化修改 Antd 组件等），优先使用 CSS Modules 或内联 `style`，无需强行用 Tailwind。
+- 使用 `@/styles/index.ts` 导出的常用 className 常量（如 `AbsoluteCenter`）时，直接导入使用即可。
+
+## 工具函数使用规范
+
+- 使用 `@/utils/index` 中的工具函数时，按需导入即可，例如 `import { cn, sleep } from '@/utils'`。
+- 使用 `@/lib` 中的封装时，通常只在 layout 级别或全局初始化时使用，正常业务页面/组件应调用 `@/utils` 或具体模块。
+
+## 类型使用规范
+
+- 使用 `Style` 类型时，在组件 Props 类型中通过交叉类型引入：`export type XXProps = Style & { ... }`。
+- 使用 `ActionType<ActionMap>` 时，定义 action 映射类型，然后通过 `ActionType` 转换为可辨识联合类型，在 reducer 等函数中使用 `action.type` 进行类型收窄。
+- 使用 `ValueController` 类型时，通过 `import type { ValueController } from 'value-controller'` 导入，根据组件需求配置 `strictValue`、`strictOnChange` 等参数。

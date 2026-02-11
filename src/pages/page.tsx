@@ -15,6 +15,7 @@ const Page: FC = () => {
   const addClipFromResource = useEditorStore((s) => s.addClipFromResource)
   const moveClip = useEditorStore((s) => s.moveClip)
   const moveClipToTrack = useEditorStore((s) => s.moveClipToTrack)
+  const resizeClip = useEditorStore((s) => s.resizeClip)
 
   const timelineScrollRef = useRef<HTMLDivElement | null>(null)
 
@@ -36,7 +37,17 @@ const Page: FC = () => {
     const centerX = activeRect.left + activeRect.width / 2
     const xInOver = centerX - overRect.left
     const xInContent = Math.max(0, xInOver + scrollLeft)
-    const startMs = pxToMs(xInContent, zoom)
+    const dropStartMs = pxToMs(xInContent, zoom)
+
+    const deltaMs = pxToMs(e.delta.x, zoom)
+    const project = useEditorStore.getState().project
+    const findClip = (clipId: string) => {
+      for (const t of project.tracks) {
+        const c = t.clips.find((x) => x.id === clipId)
+        if (c) return c
+      }
+      return null
+    }
 
     if (active.kind === 'resource') {
       const meta = resources[active.resourceId]
@@ -44,20 +55,42 @@ const Page: FC = () => {
       addClipFromResource({
         resourceId: active.resourceId,
         trackId: over.trackId,
-        startMs,
+        startMs: dropStartMs,
         durationMs,
       })
       return
     }
 
     if (active.kind === 'clip') {
+      const clip = findClip(active.clipId)
+      if (!clip) return
+      const nextStartMs = clip.startMs + deltaMs
+
       const activeData = e.active.data.current as { trackId?: string } | undefined
       const fromTrackId = activeData?.trackId
       if (fromTrackId && fromTrackId === over.trackId) {
-        moveClip(active.clipId, startMs)
+        moveClip(active.clipId, nextStartMs)
       } else {
-        moveClipToTrack(active.clipId, over.trackId, startMs)
+        moveClipToTrack(active.clipId, over.trackId, nextStartMs)
       }
+      return
+    }
+
+    if (active.kind === 'clipResizeStart') {
+      const clip = findClip(active.clipId)
+      if (!clip) return
+      // 左把手：end 固定 -> duration = duration - delta
+      const nextDurationMs = clip.durationMs - deltaMs
+      resizeClip(active.clipId, nextDurationMs, 'start')
+      return
+    }
+
+    if (active.kind === 'clipResizeEnd') {
+      const clip = findClip(active.clipId)
+      if (!clip) return
+      // 右把手：start 固定 -> duration = duration + delta
+      const nextDurationMs = clip.durationMs + deltaMs
+      resizeClip(active.clipId, nextDurationMs, 'end')
     }
   }
 

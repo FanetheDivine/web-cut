@@ -426,6 +426,8 @@ export const useEditorStore = create<EditorState & EditorActions>()(
 export const EditorDndKeys = {
   track: (trackId: TrackId) => `track:${trackId}`,
   clip: (clipId: ClipId) => `clip:${clipId}`,
+  clipResizeStart: (clipId: ClipId) => `clipResizeStart:${clipId}`,
+  clipResizeEnd: (clipId: ClipId) => `clipResizeEnd:${clipId}`,
   resource: (resourceId: ResourceId) => `resource:${resourceId}`,
   project: () => `project`,
 }

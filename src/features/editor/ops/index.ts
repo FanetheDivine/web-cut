@@ -6,8 +6,6 @@ export {
   addAudioClipFromResource,
   addTextClip,
   addVideoClipFromResource,
-  assertNoOverlap,
-  canPlaceClipInTrack,
   moveClipInTrack,
   moveClipToTrack,
   removeClip,

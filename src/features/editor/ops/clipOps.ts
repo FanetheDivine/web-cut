@@ -8,6 +8,7 @@ import {
   getTrackOfClip,
   touchProject,
 } from '@/features/editor/ops/projectOps'
+import { squeezeTrackClips } from '@/features/editor/ops/squeeze'
 import { clampNonNegative, rangesOverlap, toRange } from '@/features/editor/ops/time'
 import type {
   AudioClip,
@@ -61,13 +62,12 @@ export const addVideoClipFromResource = (
   if (clip.startMs < 0 || clip.durationMs < MIN_DURATION_MS || clip.trimStartMs < 0) {
     throw new EditorOpError('invalid_time', `非法时间参数`, clip)
   }
-  assertNoOverlap(track.clips, clip)
+
+  const nextTrack = squeezeTrackClips({ ...track, clips: [...track.clips, clip] }, clip.id)
 
   const next: EditorProject = {
     ...project,
-    tracks: project.tracks.map((t) =>
-      t.id === track.id ? { ...t, clips: [...t.clips, clip] } : t,
-    ),
+    tracks: project.tracks.map((t) => (t.id === track.id ? nextTrack : t)),
   }
   return touchProject(next)
 }
@@ -91,13 +91,12 @@ export const addAudioClipFromResource = (
   if (clip.startMs < 0 || clip.durationMs < MIN_DURATION_MS || clip.trimStartMs < 0) {
     throw new EditorOpError('invalid_time', `非法时间参数`, clip)
   }
-  assertNoOverlap(track.clips, clip)
+
+  const nextTrack = squeezeTrackClips({ ...track, clips: [...track.clips, clip] }, clip.id)
 
   const next: EditorProject = {
     ...project,
-    tracks: project.tracks.map((t) =>
-      t.id === track.id ? { ...t, clips: [...t.clips, clip] } : t,
-    ),
+    tracks: project.tracks.map((t) => (t.id === track.id ? nextTrack : t)),
   }
   return touchProject(next)
 }
@@ -110,13 +109,12 @@ export const addTextClip = (project: EditorProject, input: Omit<TextClip, 'id' |
   if (clip.startMs < 0 || clip.durationMs < MIN_DURATION_MS) {
     throw new EditorOpError('invalid_time', `非法时间参数`, clip)
   }
-  assertNoOverlap(track.clips, clip)
+
+  const nextTrack = squeezeTrackClips({ ...track, clips: [...track.clips, clip] }, clip.id)
 
   const next: EditorProject = {
     ...project,
-    tracks: project.tracks.map((t) =>
-      t.id === track.id ? { ...t, clips: [...t.clips, clip] } : t,
-    ),
+    tracks: project.tracks.map((t) => (t.id === track.id ? nextTrack : t)),
   }
   return touchProject(next)
 }
@@ -126,13 +124,14 @@ export const moveClipInTrack = (project: EditorProject, clipId: ClipId, nextStar
   const track = getTrack(project, clip.trackId)
 
   const moved: Clip = { ...clip, startMs: clampNonNegative(nextStartMs) }
-  assertNoOverlap(track.clips, moved, clipId)
+  const nextTrack = squeezeTrackClips(
+    { ...track, clips: track.clips.map((c) => (c.id === clipId ? moved : c)) },
+    clipId,
+  )
 
   const next: EditorProject = {
     ...project,
-    tracks: project.tracks.map((t) =>
-      t.id !== track.id ? t : { ...t, clips: t.clips.map((c) => (c.id === clipId ? moved : c)) },
-    ),
+    tracks: project.tracks.map((t) => (t.id !== track.id ? t : nextTrack)),
   }
   return touchProject(next)
 }
@@ -149,13 +148,13 @@ export const moveClipToTrack = (
   assertTrackAcceptsClipKind(toTrack.kind, clip.kind as ClipKind)
 
   const moved: Clip = { ...clip, trackId: nextTrackId, startMs: clampNonNegative(nextStartMs) }
-  assertNoOverlap(toTrack.clips, moved)
+  const nextToTrack = squeezeTrackClips({ ...toTrack, clips: [...toTrack.clips, moved] }, clipId)
 
   const next: EditorProject = {
     ...project,
     tracks: project.tracks.map((t) => {
       if (t.id === fromTrack.id) return { ...t, clips: t.clips.filter((c) => c.id !== clipId) }
-      if (t.id === toTrack.id) return { ...t, clips: [...t.clips, moved] }
+      if (t.id === toTrack.id) return nextToTrack
       return t
     }),
   }
@@ -182,13 +181,14 @@ export const resizeClip = (
           durationMs,
         }
 
-  assertNoOverlap(track.clips, resized, clipId)
+  const nextTrack = squeezeTrackClips(
+    { ...track, clips: track.clips.map((c) => (c.id === clipId ? resized : c)) },
+    clipId,
+  )
 
   const next: EditorProject = {
     ...project,
-    tracks: project.tracks.map((t) =>
-      t.id !== track.id ? t : { ...t, clips: t.clips.map((c) => (c.id === clipId ? resized : c)) },
-    ),
+    tracks: project.tracks.map((t) => (t.id !== track.id ? t : nextTrack)),
   }
   return touchProject(next)
 }
@@ -213,13 +213,14 @@ export const updateTextClip = (
     style: { ...clip.style, ...(patch.style ?? {}) },
     transform: { ...clip.transform, ...(patch.transform ?? {}) },
   }
-  assertNoOverlap(track.clips, nextClip, clipId)
+  const nextTrack = squeezeTrackClips(
+    { ...track, clips: track.clips.map((c) => (c.id === clipId ? nextClip : c)) },
+    clipId,
+  )
 
   const next: EditorProject = {
     ...project,
-    tracks: project.tracks.map((t) =>
-      t.id !== track.id ? t : { ...t, clips: t.clips.map((c) => (c.id === clipId ? nextClip : c)) },
-    ),
+    tracks: project.tracks.map((t) => (t.id !== track.id ? t : nextTrack)),
   }
   return touchProject(next)
 }

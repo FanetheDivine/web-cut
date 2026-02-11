@@ -72,6 +72,15 @@ const ClipBlock: FC<ClipBlockProps> = (props) => {
     },
   })
 
+  const resizeStart = useDraggable({
+    id: EditorDndKeys.clipResizeStart(clip.id),
+    data: { kind: 'clipResizeStart', clipId: clip.id, trackId: clip.trackId },
+  })
+  const resizeEnd = useDraggable({
+    id: EditorDndKeys.clipResizeEnd(clip.id),
+    data: { kind: 'clipResizeEnd', clipId: clip.id, trackId: clip.trackId },
+  })
+
   const left = msToPx(clip.startMs, zoom)
   const width = Math.max(8, msToPx(clip.durationMs, zoom))
 
@@ -90,22 +99,56 @@ const ClipBlock: FC<ClipBlockProps> = (props) => {
     <div
       ref={setNodeRef}
       className={[
-        'absolute top-1/2 -translate-y-1/2 rounded border px-2 py-1 text-[11px] text-zinc-100',
+        'absolute top-1/2 -translate-y-1/2 rounded border text-[11px] text-zinc-100',
         isSelected ? 'border-zinc-200 bg-zinc-700/60' : 'border-zinc-700 bg-zinc-800/40',
         className,
       ]
         .filter(Boolean)
         .join(' ')}
       style={dragStyle}
-      {...listeners}
-      {...attributes}
+      data-editor-clip='true'
       onClick={(e) => {
         e.stopPropagation()
         selectClip(clip.id)
       }}
-      title='拖拽移动（MVP 不支持拉伸 resize）'
+      title='拖拽中间区域移动；拖拽左右把手调整开始/时长'
     >
-      <div className='truncate'>{label}</div>
+      {/* 左侧把手：修改 startMs + durationMs（end 固定） */}
+      <div
+        ref={resizeStart.setNodeRef}
+        className='absolute inset-y-0 left-0 w-2 cursor-ew-resize rounded-l bg-zinc-200/10 hover:bg-zinc-200/20'
+        style={{
+          transform: resizeStart.transform
+            ? `translate3d(${resizeStart.transform.x}px, ${resizeStart.transform.y}px, 0)`
+            : undefined,
+          opacity: resizeStart.isDragging ? 0.6 : 1,
+        }}
+        {...resizeStart.listeners}
+        {...resizeStart.attributes}
+        onMouseDown={(e) => e.stopPropagation()}
+        title='拖拽调整开始时间（左边界）'
+      />
+
+      {/* 中间区域：整体拖拽，只改 startMs */}
+      <div className='px-2 py-1' {...listeners} {...attributes}>
+        <div className='truncate'>{label}</div>
+      </div>
+
+      {/* 右侧把手：修改 durationMs（end 改变） */}
+      <div
+        ref={resizeEnd.setNodeRef}
+        className='absolute inset-y-0 right-0 w-2 cursor-ew-resize rounded-r bg-zinc-200/10 hover:bg-zinc-200/20'
+        style={{
+          transform: resizeEnd.transform
+            ? `translate3d(${resizeEnd.transform.x}px, ${resizeEnd.transform.y}px, 0)`
+            : undefined,
+          opacity: resizeEnd.isDragging ? 0.6 : 1,
+        }}
+        {...resizeEnd.listeners}
+        {...resizeEnd.attributes}
+        onMouseDown={(e) => e.stopPropagation()}
+        title='拖拽调整时长（右边界）'
+      />
     </div>
   )
 }
@@ -131,7 +174,6 @@ const TrackKindLabel: Record<TrackKind, string> = {
  */
 export const TimelineEditor: FC<TimelineEditorProps> = (props) => {
   const { onBindScrollContainer, className, style } = props
-  console.log(useEditorStore.getState())
   const _tracks = useEditorStore((s) => s.project.tracks)
   const tracks = useMemo(() => {
     return [..._tracks].sort((a, b) => a.order - b.order)
@@ -143,6 +185,16 @@ export const TimelineEditor: FC<TimelineEditorProps> = (props) => {
   const lastError = useEditorStore((s) => s.lastError)
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const playheadDraggingRef = useRef(false)
+
+  const setPlayheadFromMouseEvent = (e: React.MouseEvent<HTMLDivElement>) => {
+    const container = scrollRef.current
+    if (!container) return
+    const rect = container.getBoundingClientRect()
+    const xInViewport = e.clientX - rect.left
+    const xInContent = xInViewport + container.scrollLeft
+    setPlayheadMs(pxToMs(Math.max(0, xInContent), zoom))
+  }
 
   const contentWidthPx = useMemo(() => {
     // MVP：用“工程里最远的 clip 末尾”估计宽度（至少 2000px）
@@ -222,12 +274,29 @@ export const TimelineEditor: FC<TimelineEditorProps> = (props) => {
               onBindScrollContainer?.(el)
             }}
             className='relative min-h-0 overflow-x-auto overflow-y-hidden rounded-md border border-zinc-800 bg-zinc-950/20'
+            onMouseDown={(e) => {
+              // 点击 clip/把手不应影响 playhead（红线）
+              const target = e.target as HTMLElement
+              if (target.closest('[data-editor-clip="true"]')) return
+              playheadDraggingRef.current = true
+              setPlayheadFromMouseEvent(e)
+            }}
+            onMouseMove={(e) => {
+              if (!playheadDraggingRef.current) return
+              setPlayheadFromMouseEvent(e)
+            }}
+            onMouseUp={() => {
+              playheadDraggingRef.current = false
+            }}
+            onMouseLeave={() => {
+              playheadDraggingRef.current = false
+            }}
           >
             {/* 内容层：给一个足够大的宽度 */}
             <div className='relative' style={{ width: contentWidthPx }}>
               {/* 游标：可拖动（用一个透明的拖拽层更好；MVP 先用 mouse move） */}
               <div
-                className='absolute top-0 h-full w-px bg-red-500'
+                className='pointer-events-none absolute top-0 h-full w-px bg-red-500'
                 style={{ left: playheadLeftPx }}
                 title='playhead'
               />
@@ -240,63 +309,10 @@ export const TimelineEditor: FC<TimelineEditorProps> = (props) => {
                   </div>
                 ))}
               </div>
-
-              {/* 游标拖动层：覆盖整个区域监听 */}
-              <PlayheadDragLayer
-                contentWidthPx={contentWidthPx}
-                zoom={zoom}
-                onSetPlayheadMs={(ms) => setPlayheadMs(ms)}
-              />
             </div>
           </div>
         </div>
       </div>
     </div>
-  )
-}
-
-type PlayheadDragLayerProps = {
-  contentWidthPx: number
-  zoom: number
-  onSetPlayheadMs: (ms: number) => void
-}
-
-const PlayheadDragLayer: FC<PlayheadDragLayerProps> = (props) => {
-  const { contentWidthPx, zoom, onSetPlayheadMs } = props
-  const draggingRef = useRef(false)
-
-  const setFromMouseEvent = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const xInViewport = e.clientX - rect.left
-    // PlayheadDragLayer 的 parent 是“内容层(relative)”，再往上一层是滚动容器
-    const scrollContainer = e.currentTarget.parentElement?.parentElement as
-      | HTMLDivElement
-      | undefined
-    const scrollLeft = scrollContainer?.scrollLeft ?? 0
-    const xInContent = xInViewport + scrollLeft
-    onSetPlayheadMs(pxToMs(Math.max(0, xInContent), zoom))
-  }
-
-  return (
-    <div
-      className='absolute inset-0'
-      style={{ width: contentWidthPx }}
-      onMouseDown={(e) => {
-        // 只在右侧区域点击/拖动更新 playhead
-        draggingRef.current = true
-        setFromMouseEvent(e)
-      }}
-      onMouseMove={(e) => {
-        if (!draggingRef.current) return
-        setFromMouseEvent(e)
-      }}
-      onMouseUp={() => {
-        draggingRef.current = false
-      }}
-      onMouseLeave={() => {
-        draggingRef.current = false
-      }}
-      // 不阻止事件：让 DnD 仍然可用（MVP：接受偶发冲突；后续可改 PointerEvents 策略）
-    />
   )
 }

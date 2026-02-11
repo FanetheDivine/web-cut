@@ -152,7 +152,13 @@ export const PreviewCanvas: FC<PreviewCanvasProps> = (props) => {
 
         // 注意：composeFrame 内部有 await（seek），可能发生“后发先至”
         // 这里用 seq 做兜底：即使旧的 promise 更晚完成，也不会覆盖最新一次渲染意图（会在下一轮 while 被刷新）
-        await composeFrame({ project: useEditorStore.getState().project, playheadMs: targetMs, canvas, clear: false, getVideoElement })
+        await composeFrame({
+          project: useEditorStore.getState().project,
+          playheadMs: targetMs,
+          canvas,
+          clear: false,
+          getVideoElement,
+        })
         if (seq !== renderSeqRef.current) {
           // 新的渲染请求已经开始（或即将开始），当前结果作废
           continue

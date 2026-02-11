@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
+import { ensureIdbObjectStore } from '@/features/editor/indexedDb'
 import {
   addAudioClipFromResource,
   addTextClip,
@@ -16,7 +17,6 @@ import {
 } from '@/features/editor/ops'
 import type { ResizeAnchor } from '@/features/editor/ops'
 import { createEmptyProject } from '@/features/editor/ops/projectOps'
-import { ensureIdbObjectStore } from '@/features/editor/indexedDb'
 import { createProjectStorage } from '@/features/editor/projectStorage'
 import { createResourceRepository } from '@/features/editor/resourceRepository'
 import type { ResourceRepository } from '@/features/editor/resourceRepository'
@@ -44,6 +44,12 @@ export type EditorState = {
   project: EditorProject
   ui: EditorUIState
   repo: ResourceRepository | null
+  /**
+   * 预览帧渲染器（由 PreviewCanvas 注册）
+   * - 用于在 setPlayheadMs 时“立刻触发渲染”，避免 useEffect 带来的后发先至问题
+   * - 注意：这是运行时字段，不参与持久化
+   */
+  frameRenderer?: (playheadMs: number) => void
   /** 最近一次错误（UI 可选择展示 toast） */
   lastError?: { message: string; code?: string; details?: Record<string, unknown> }
 }
@@ -53,6 +59,8 @@ export type EditorActions = {
   persist: () => Promise<void>
 
   setPlayheadMs: (ms: number) => void
+  registerFrameRenderer: (renderer: (playheadMs: number) => void) => void
+  unregisterFrameRenderer: () => void
   setZoom: (zoom: number) => void
   selectClip: (clipId?: ClipId) => void
   selectTrack: (trackId?: TrackId) => void
@@ -127,6 +135,7 @@ export const useEditorStore = create<EditorState & EditorActions>()(
       zoom: 1,
     },
     repo: null,
+    frameRenderer: undefined,
     lastError: undefined,
 
     init: async () => {
@@ -161,8 +170,26 @@ export const useEditorStore = create<EditorState & EditorActions>()(
     },
 
     setPlayheadMs: (ms) => {
+      const next = Math.max(0, ms)
       set((s) => {
-        s.ui.playheadMs = Math.max(0, ms)
+        s.ui.playheadMs = next
+      })
+      // 立刻渲染：避免依赖 useEffect 在 commit 后触发导致顺序错乱
+      get().frameRenderer?.(next)
+    },
+
+    registerFrameRenderer: (renderer) => {
+      set((s) => {
+        s.frameRenderer = renderer
+      })
+      // 注册后立刻渲染一次当前帧，保证首屏不空
+      const ms = get().ui.playheadMs
+      renderer(ms)
+    },
+
+    unregisterFrameRenderer: () => {
+      set((s) => {
+        s.frameRenderer = undefined
       })
     },
 

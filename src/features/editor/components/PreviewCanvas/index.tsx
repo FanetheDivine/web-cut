@@ -68,11 +68,16 @@ export const PreviewCanvas: FC<PreviewCanvasProps> = (props) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const videoPoolRef = useRef<VideoPool>(new Map())
   const readySetRef = useRef<Set<ResourceId>>(new Set())
+  const renderSeqRef = useRef(0)
+  const renderingRef = useRef(false)
+  const lastRequestedMsRef = useRef<number | null>(null)
 
   const project = useEditorStore((s) => s.project)
   const playheadMs = useEditorStore((s) => s.ui.playheadMs)
   const repo = useEditorStore((s) => s.repo)
   const setPlayheadMs = useEditorStore((s) => s.setPlayheadMs)
+  const registerFrameRenderer = useEditorStore((s) => s.registerFrameRenderer)
+  const unregisterFrameRenderer = useEditorStore((s) => s.unregisterFrameRenderer)
 
   const [isPlaying, setIsPlaying] = useState(false)
 
@@ -130,12 +135,50 @@ export const PreviewCanvas: FC<PreviewCanvasProps> = (props) => {
     }
   }, [project, playheadMs, repo])
 
-  // 合成当前帧
+  const renderFrameAt = async (ms: number) => {
+    lastRequestedMsRef.current = ms
+    // 合并频繁请求：如果正在渲染，直接记录最新 ms，等待当前渲染结束后补一帧
+    if (renderingRef.current) return
+    renderingRef.current = true
+
+    try {
+      while (lastRequestedMsRef.current !== null) {
+        const targetMs = lastRequestedMsRef.current
+        lastRequestedMsRef.current = null
+
+        const seq = ++renderSeqRef.current
+        const canvas = canvasRef.current
+        if (!canvas) return
+
+        // 注意：composeFrame 内部有 await（seek），可能发生“后发先至”
+        // 这里用 seq 做兜底：即使旧的 promise 更晚完成，也不会覆盖最新一次渲染意图（会在下一轮 while 被刷新）
+        await composeFrame({ project: useEditorStore.getState().project, playheadMs: targetMs, canvas, clear: false, getVideoElement })
+        if (seq !== renderSeqRef.current) {
+          // 新的渲染请求已经开始（或即将开始），当前结果作废
+          continue
+        }
+      }
+    } finally {
+      renderingRef.current = false
+    }
+  }
+
+  // 注册渲染器：由 setPlayheadMs 直接触发 renderFrameAt（不再依赖 useEffect）
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    void composeFrame({ project, playheadMs, canvas, getVideoElement })
-  }, [getVideoElement, playheadMs, project])
+    registerFrameRenderer((ms) => {
+      void renderFrameAt(ms)
+    })
+    return () => {
+      unregisterFrameRenderer()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registerFrameRenderer, unregisterFrameRenderer])
+
+  // 工程变化时也补一次渲染（例如 clip 被移动/新增后，当前帧应立刻更新）
+  useEffect(() => {
+    void renderFrameAt(useEditorStore.getState().ui.playheadMs)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project])
 
   // 播放循环：驱动 playheadMs
   useEffect(() => {

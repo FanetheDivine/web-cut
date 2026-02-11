@@ -26,6 +26,12 @@ export type ComposeFrameArgs = {
   playheadMs: number
   canvas: HTMLCanvasElement
   /**
+   * 是否在合成前清空画布
+   * - 默认为 false：不清空之前内容（会产生“累积绘制”的效果）
+   * - 若要每帧重绘（常见预览模式），请显式传 true
+   */
+  clear?: boolean
+  /**
    * UI 层提供：根据 resourceId 返回视频元素
    * - 若资源还未准备好（未加载/未创建），可以返回 null
    */
@@ -89,7 +95,7 @@ const seekVideoTo = async (video: HTMLVideoElement, timeSec: number) => {
 }
 
 export const composeFrame = async (args: ComposeFrameArgs) => {
-  const { project, playheadMs, canvas, getVideoElement } = args
+  const { project, playheadMs, canvas, clear = false, getVideoElement } = args
 
   // 保证 canvas 尺寸与工程一致（UI 也可以在外部维护，这里做兜底）
   if (canvas.width !== project.settings.width) canvas.width = project.settings.width
@@ -98,13 +104,15 @@ export const composeFrame = async (args: ComposeFrameArgs) => {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
 
-  // 清屏
-  ctx.save()
-  ctx.globalAlpha = 1
-  ctx.setTransform(1, 0, 0, 1, 0, 0)
-  ctx.fillStyle = project.settings.backgroundColor
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-  ctx.restore()
+  if (clear) {
+    // 清屏（每帧重绘模式）
+    ctx.save()
+    ctx.globalAlpha = 1
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.fillStyle = project.settings.backgroundColor
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.restore()
+  }
 
   const actives = findActiveVideoClips(project, playheadMs)
 

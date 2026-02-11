@@ -1,7 +1,13 @@
 export { EditorOpError } from './errors'
 export type { EditorOpErrorCode } from './errors'
 export { createEmptyProject } from './projectOps'
-export { addTrack, removeTrack, reorderTracksByIndex, setTrackOpacity } from './trackOps'
+export {
+  addTrack,
+  removeTrack,
+  reorderTracksByIndex,
+  setTrackName,
+  setTrackOpacity,
+} from './trackOps'
 export {
   addAudioClipFromResource,
   addTextClip,

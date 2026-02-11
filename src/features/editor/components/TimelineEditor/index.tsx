@@ -1,5 +1,6 @@
 import type { FC } from 'react'
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { Form, Input, InputNumber, Modal, Select } from 'antd'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { msToPx, pxToMs } from '@/features/editor/components/timelineScale'
 import { EditorDndKeys, useEditorStore } from '@/features/editor/store/useEditorStore'
@@ -182,10 +183,42 @@ export const TimelineEditor: FC<TimelineEditorProps> = (props) => {
   const playheadMs = useEditorStore((s) => s.ui.playheadMs)
   const setPlayheadMs = useEditorStore((s) => s.setPlayheadMs)
   const addTrack = useEditorStore((s) => s.addTrack)
+  const addTextClip = useEditorStore((s) => s.addTextClip)
+  const setTrackName = useEditorStore((s) => s.setTrackName)
+  const setTrackOpacity = useEditorStore((s) => s.setTrackOpacity)
   const lastError = useEditorStore((s) => s.lastError)
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const playheadDraggingRef = useRef(false)
+
+  const [isTextClipModalOpen, setIsTextClipModalOpen] = useState(false)
+  const [textClipTrackId, setTextClipTrackId] = useState<string | null>(null)
+  const [isTextClipSubmitting, setIsTextClipSubmitting] = useState(false)
+  const [textClipForm] = Form.useForm<{
+    text: string
+    durationMs: number
+    fontFamily: string
+    fontSize: number
+    fontWeight: 'normal' | 'bold' | number
+    color: string
+    x: number
+    y: number
+  }>()
+
+  const openTextClipModal = (trackId: string) => {
+    setTextClipTrackId(trackId)
+    setIsTextClipModalOpen(true)
+    textClipForm.setFieldsValue({
+      text: 'Hello',
+      durationMs: 2000,
+      fontFamily: 'sans-serif',
+      fontSize: 48,
+      fontWeight: 'bold',
+      color: '#ffffff',
+      x: 0,
+      y: 0,
+    })
+  }
 
   const setPlayheadFromMouseEvent = (e: React.MouseEvent<HTMLDivElement>) => {
     const container = scrollRef.current
@@ -210,109 +243,266 @@ export const TimelineEditor: FC<TimelineEditorProps> = (props) => {
   const playheadLeftPx = msToPx(playheadMs, zoom)
 
   return (
-    <div className={className} style={style}>
-      {lastError?.message ? (
-        <div className='mb-2 rounded border border-amber-700/50 bg-amber-900/20 px-2 py-1 text-xs text-amber-200'>
-          {lastError.message}
-        </div>
-      ) : null}
-
-      <div className='grid grid-cols-[220px_1fr] gap-3'>
-        {/* 左侧：轨道列表 */}
-        <div className='min-h-0'>
-          <div className='flex items-center justify-between'>
-            <div className='text-xs font-semibold text-zinc-200'>轨道</div>
-            <div className='flex items-center gap-1'>
-              {(['video', 'audio', 'text'] as const).map((k) => (
-                <button
-                  key={k}
-                  className='rounded border border-zinc-700 px-2 py-1 text-[11px] text-zinc-200 hover:bg-zinc-800'
-                  type='button'
-                  onClick={() => addTrack(k)}
-                  title={`新增${TrackKindLabel[k]}轨道`}
-                >
-                  +{TrackKindLabel[k]}
-                </button>
-              ))}
-            </div>
+    <>
+      <div className={className} style={style}>
+        {lastError?.message ? (
+          <div className='mb-2 rounded border border-amber-700/50 bg-amber-900/20 px-2 py-1 text-xs text-amber-200'>
+            {lastError.message}
           </div>
+        ) : null}
 
-          <div className='mt-2 grid gap-2'>
-            {tracks.length === 0 ? (
-              <div className='rounded-md border border-dashed border-zinc-700/70 bg-zinc-950/20 p-2 text-xs text-zinc-500'>
-                暂无轨道。请先新增轨道，然后拖拽资源到右侧 lane 创建 clip。
-              </div>
-            ) : (
-              tracks.map((t) => (
-                <div
-                  key={t.id}
-                  className='flex h-12 items-center justify-between rounded-md border border-zinc-800 bg-zinc-950/20 px-2'
-                >
-                  <div className='min-w-0'>
-                    <div className='truncate text-xs text-zinc-100'>{t.name}</div>
-                    <div className='text-[11px] text-zinc-400'>{TrackKindLabel[t.kind]}</div>
-                  </div>
-                  <div className='text-[11px] text-zinc-400'>opacity {t.opacity.toFixed(2)}</div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* 右侧：时间轴区域 */}
-        <div className='min-h-0'>
-          <div className='mb-2 flex items-center justify-between'>
-            <div className='text-xs font-semibold text-zinc-200'>时间轴</div>
-            <div className='text-[11px] text-zinc-400'>
-              拖动竖线调整游标；拖动 clip/资源进行编辑
-            </div>
-          </div>
-
-          <div
-            ref={(el) => {
-              scrollRef.current = el
-              onBindScrollContainer?.(el)
-            }}
-            className='relative min-h-0 overflow-x-auto overflow-y-hidden rounded-md border border-zinc-800 bg-zinc-950/20'
-            onMouseDown={(e) => {
-              // 点击 clip/把手不应影响 playhead（红线）
-              const target = e.target as HTMLElement
-              if (target.closest('[data-editor-clip="true"]')) return
-              playheadDraggingRef.current = true
-              setPlayheadFromMouseEvent(e)
-            }}
-            onMouseMove={(e) => {
-              if (!playheadDraggingRef.current) return
-              setPlayheadFromMouseEvent(e)
-            }}
-            onMouseUp={() => {
-              playheadDraggingRef.current = false
-            }}
-            onMouseLeave={() => {
-              playheadDraggingRef.current = false
-            }}
-          >
-            {/* 内容层：给一个足够大的宽度 */}
-            <div className='relative' style={{ width: contentWidthPx }}>
-              {/* 游标：可拖动（用一个透明的拖拽层更好；MVP 先用 mouse move） */}
-              <div
-                className='pointer-events-none absolute top-0 h-full w-px bg-red-500'
-                style={{ left: playheadLeftPx }}
-                title='playhead'
-              />
-
-              {/* 轨道 lanes */}
-              <div className='grid gap-2 p-2'>
-                {tracks.map((t) => (
-                  <div key={t.id} className='relative'>
-                    <TrackLane track={t} zoom={zoom} />
-                  </div>
+        <div className='grid grid-cols-[220px_1fr] gap-3'>
+          {/* 左侧：轨道列表 */}
+          <div className='min-h-0'>
+            <div className='flex items-center justify-between'>
+              <div className='text-xs font-semibold text-zinc-200'>轨道</div>
+              <div className='flex items-center gap-1'>
+                {(['video', 'audio', 'text'] as const).map((k) => (
+                  <button
+                    key={k}
+                    className='rounded border border-zinc-700 px-2 py-1 text-[11px] text-zinc-200 hover:bg-zinc-800'
+                    type='button'
+                    onClick={() => addTrack(k)}
+                    title={`新增${TrackKindLabel[k]}轨道`}
+                  >
+                    +{TrackKindLabel[k]}
+                  </button>
                 ))}
+              </div>
+            </div>
+
+            <div className='mt-2 grid gap-2'>
+              {tracks.length === 0 ? (
+                <div className='rounded-md border border-dashed border-zinc-700/70 bg-zinc-950/20 p-2 text-xs text-zinc-500'>
+                  暂无轨道。请先新增轨道，然后拖拽资源到右侧 lane 创建 clip。
+                </div>
+              ) : (
+                tracks.map((t) => (
+                  <div
+                    key={t.id}
+                    className='flex h-14 items-center justify-between gap-2 rounded-md border border-zinc-800 bg-zinc-950/20 px-2'
+                  >
+                    <div className='min-w-0 flex-1'>
+                      <input
+                        className='w-full rounded border border-zinc-800 bg-zinc-950/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-zinc-600'
+                        value={t.name}
+                        onChange={(e) => setTrackName(t.id, e.target.value)}
+                        placeholder='轨道名称'
+                      />
+                      <div className='mt-1 text-[11px] text-zinc-400'>{TrackKindLabel[t.kind]}</div>
+                    </div>
+
+                    <div className='flex items-center gap-2'>
+                      <div className='flex items-center gap-1'>
+                        <div className='text-[11px] text-zinc-500'>opacity</div>
+                        <input
+                          className='w-14 rounded border border-zinc-800 bg-zinc-950/40 px-1 py-1 text-right text-[11px] text-zinc-100 outline-none focus:border-zinc-600'
+                          value={t.opacity.toFixed(2)}
+                          onChange={(e) => {
+                            const v = Number(e.target.value)
+                            if (Number.isNaN(v)) return
+                            setTrackOpacity(t.id, Math.max(0, Math.min(1, v)))
+                          }}
+                          inputMode='decimal'
+                        />
+                      </div>
+
+                      {t.kind === 'text' ? (
+                        <button
+                          className='rounded border border-zinc-700 px-2 py-1 text-[11px] text-zinc-200 hover:bg-zinc-800'
+                          type='button'
+                          title='创建文本 clip'
+                          onClick={() => {
+                            openTextClipModal(t.id)
+                          }}
+                        >
+                          +
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* 右侧：时间轴区域 */}
+          <div className='min-h-0'>
+            <div className='mb-2 flex items-center justify-between'>
+              <div className='text-xs font-semibold text-zinc-200'>时间轴</div>
+              <div className='text-[11px] text-zinc-400'>
+                拖动竖线调整游标；拖动 clip/资源进行编辑
+              </div>
+            </div>
+
+            <div
+              ref={(el) => {
+                scrollRef.current = el
+                onBindScrollContainer?.(el)
+              }}
+              className='relative min-h-0 overflow-x-auto overflow-y-hidden rounded-md border border-zinc-800 bg-zinc-950/20'
+              onMouseDown={(e) => {
+                // 点击 clip/把手不应影响 playhead（红线）
+                const target = e.target as HTMLElement
+                if (target.closest('[data-editor-clip="true"]')) return
+                playheadDraggingRef.current = true
+                setPlayheadFromMouseEvent(e)
+              }}
+              onMouseMove={(e) => {
+                if (!playheadDraggingRef.current) return
+                setPlayheadFromMouseEvent(e)
+              }}
+              onMouseUp={() => {
+                playheadDraggingRef.current = false
+              }}
+              onMouseLeave={() => {
+                playheadDraggingRef.current = false
+              }}
+            >
+              {/* 内容层：给一个足够大的宽度 */}
+              <div className='relative' style={{ width: contentWidthPx }}>
+                {/* 游标：可拖动（用一个透明的拖拽层更好；MVP 先用 mouse move） */}
+                <div
+                  className='pointer-events-none absolute top-0 h-full w-px bg-red-500'
+                  style={{ left: playheadLeftPx }}
+                  title='playhead'
+                />
+
+                {/* 轨道 lanes */}
+                <div className='grid gap-2 p-2'>
+                  {tracks.map((t) => (
+                    <div key={t.id} className='relative'>
+                      <TrackLane track={t} zoom={zoom} />
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+
+      <Modal
+        title='创建文本 Clip'
+        open={isTextClipModalOpen}
+        okText='创建'
+        cancelText='取消'
+        confirmLoading={isTextClipSubmitting}
+        maskClosable={!isTextClipSubmitting}
+        closable={!isTextClipSubmitting}
+        keyboard={!isTextClipSubmitting}
+        onCancel={() => {
+          if (isTextClipSubmitting) return
+          setIsTextClipModalOpen(false)
+          setTextClipTrackId(null)
+        }}
+        onOk={async () => {
+          if (!textClipTrackId) return
+          try {
+            setIsTextClipSubmitting(true)
+            const v = await textClipForm.validateFields()
+            addTextClip({
+              trackId: textClipTrackId,
+              startMs: playheadMs,
+              durationMs: v.durationMs,
+              text: v.text,
+              style: {
+                fontFamily: v.fontFamily,
+                fontSize: v.fontSize,
+                fontWeight: v.fontWeight,
+                color: v.color,
+                align: 'left',
+              },
+              transform: {
+                x: v.x,
+                y: v.y,
+                scale: 1,
+                rotateDeg: 0,
+              },
+            })
+            setIsTextClipModalOpen(false)
+            setTextClipTrackId(null)
+          } finally {
+            setIsTextClipSubmitting(false)
+          }
+        }}
+      >
+        <Form form={textClipForm} layout='vertical'>
+          <Form.Item
+            name='text'
+            label='文本内容'
+            rules={[{ required: true, message: '请输入文本内容' }]}
+          >
+            <Input placeholder='例如：Hello' />
+          </Form.Item>
+
+          <div className='grid grid-cols-2 gap-3'>
+            <Form.Item
+              name='durationMs'
+              label='时长（ms）'
+              rules={[{ required: true, message: '请输入时长' }]}
+            >
+              <InputNumber className='w-full' min={1} step={100} />
+            </Form.Item>
+
+            <Form.Item
+              name='fontFamily'
+              label='字体'
+              rules={[{ required: true, message: '请输入字体' }]}
+            >
+              <Input placeholder='例如：sans-serif' />
+            </Form.Item>
+
+            <Form.Item
+              name='fontSize'
+              label='字号'
+              rules={[{ required: true, message: '请输入字号' }]}
+            >
+              <InputNumber className='w-full' min={1} step={1} />
+            </Form.Item>
+
+            <Form.Item
+              name='fontWeight'
+              label='字重'
+              rules={[{ required: true, message: '请选择字重' }]}
+            >
+              <Select
+                options={[
+                  { label: 'normal', value: 'normal' },
+                  { label: 'bold', value: 'bold' },
+                  { label: '600', value: 600 },
+                  { label: '700', value: 700 },
+                ]}
+              />
+            </Form.Item>
+
+            <Form.Item
+              name='color'
+              label='颜色'
+              rules={[{ required: true, message: '请输入颜色' }]}
+            >
+              <Input placeholder='#ffffff' />
+            </Form.Item>
+
+            <div className='col-span-2 grid grid-cols-2 gap-3'>
+              <Form.Item
+                name='x'
+                label='左上角 X'
+                rules={[{ required: true, message: '请输入 X' }]}
+              >
+                <InputNumber className='w-full' step={1} />
+              </Form.Item>
+              <Form.Item
+                name='y'
+                label='左上角 Y'
+                rules={[{ required: true, message: '请输入 Y' }]}
+              >
+                <InputNumber className='w-full' step={1} />
+              </Form.Item>
+            </div>
+          </div>
+        </Form>
+      </Modal>
+    </>
   )
 }

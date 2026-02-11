@@ -50,6 +50,15 @@ export const setTrackOpacity = (project: EditorProject, trackId: TrackId, opacit
   return touchProject(next)
 }
 
+export const setTrackName = (project: EditorProject, trackId: TrackId, name: string) => {
+  const next = {
+    ...project,
+    tracks: project.tracks.map((t) => (t.id === trackId ? { ...t, name } : t)),
+  }
+  getTrack(next, trackId)
+  return touchProject(next)
+}
+
 export const reorderTracksByIndex = (
   project: EditorProject,
   fromIndex: number,

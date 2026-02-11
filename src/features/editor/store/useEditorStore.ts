@@ -12,6 +12,7 @@ import {
   removeTrack,
   reorderTracksByIndex,
   resizeClip,
+  setTrackName,
   setTrackOpacity,
   updateTextClip,
 } from '@/features/editor/ops'
@@ -71,6 +72,7 @@ export type EditorActions = {
   addTrack: (kind: TrackKind) => void
   removeTrack: (trackId: TrackId) => void
   reorderTracksByIndex: (fromIndex: number, toIndex: number) => void
+  setTrackName: (trackId: TrackId, name: string) => void
   setTrackOpacity: (trackId: TrackId, opacity: number) => void
 
   addClipFromResource: (input: {
@@ -84,6 +86,14 @@ export type EditorActions = {
     startMs: number
     durationMs: number
     text?: string
+    style?: Partial<{
+      fontFamily: string
+      fontSize: number
+      fontWeight: number | 'normal' | 'bold'
+      color: string
+      align: 'left' | 'center' | 'right'
+    }>
+    transform?: Partial<{ x: number; y: number; scale: number; rotateDeg: number }>
   }) => void
   removeClip: (clipId: ClipId) => void
   moveClip: (clipId: ClipId, nextStartMs: number) => void
@@ -281,6 +291,18 @@ export const useEditorStore = create<EditorState & EditorActions>()(
       }
     },
 
+    setTrackName: (trackId, name) => {
+      try {
+        const next = setTrackName(get().project, trackId, name)
+        set((s) => {
+          s.project = next
+        })
+        void storage.save(get().project)
+      } catch (e) {
+        reportError(set, e)
+      }
+    },
+
     setTrackOpacity: (trackId, opacity) => {
       try {
         const next = setTrackOpacity(get().project, trackId, opacity)
@@ -327,7 +349,7 @@ export const useEditorStore = create<EditorState & EditorActions>()(
       }
     },
 
-    addTextClip: ({ trackId, startMs, durationMs, text }) => {
+    addTextClip: ({ trackId, startMs, durationMs, text, style, transform }) => {
       try {
         const next = addTextClip(get().project, {
           trackId,
@@ -340,12 +362,14 @@ export const useEditorStore = create<EditorState & EditorActions>()(
             fontWeight: 'bold',
             color: '#ffffff',
             align: 'center',
+            ...(style ?? {}),
           },
           transform: {
             x: 100,
             y: 100,
             scale: 1,
             rotateDeg: 0,
+            ...(transform ?? {}),
           },
         })
         set((s) => {

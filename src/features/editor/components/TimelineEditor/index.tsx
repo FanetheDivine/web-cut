@@ -134,7 +134,7 @@ export const TimelineEditor: FC<TimelineEditorProps> = (props) => {
 
   const _tracks = useEditorStore((s) => s.project.tracks)
   const tracks = useMemo(() => {
-    return _tracks.sort((a, b) => a.order - b.order)
+    return [..._tracks].sort((a, b) => a.order - b.order)
   }, [_tracks])
   const zoom = useEditorStore((s) => s.ui.zoom)
   const playheadMs = useEditorStore((s) => s.ui.playheadMs)

@@ -80,7 +80,7 @@ const Page: FC = () => {
               <div className='text-sm font-semibold'>预览</div>
               <div className='text-xs text-zinc-400'>canvas 合成当前帧（playheadMs）</div>
             </div>
-            <div className='min-h-0 flex-1 p-3'>
+            <div className='min-h-0 flex-1 overflow-hidden p-3'>
               <PreviewCanvas />
             </div>
           </div>

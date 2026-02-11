@@ -1,5 +1,6 @@
 import type { FC } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { cn } from '@/utils'
 import { formatTimecodeMs } from '@/features/editor/components/timelineScale'
 import { composeFrame } from '@/features/editor/frameComposer'
 import { useEditorStore } from '@/features/editor/store/useEditorStore'
@@ -156,7 +157,7 @@ export const PreviewCanvas: FC<PreviewCanvasProps> = (props) => {
   }, [isPlaying, setPlayheadMs])
 
   return (
-    <div className={className} style={style}>
+    <div className={cn('flex h-full min-h-0 flex-col overflow-hidden', className)} style={style}>
       <div className='flex items-center justify-between gap-2'>
         <div className='text-xs text-zinc-300'>Time: {formatTimecodeMs(playheadMs)}</div>
         <div className='flex items-center gap-2'>
@@ -177,8 +178,8 @@ export const PreviewCanvas: FC<PreviewCanvasProps> = (props) => {
         </div>
       </div>
 
-      <div className='mt-3 flex items-center justify-center rounded-md bg-black p-2'>
-        <canvas ref={canvasRef} className='max-h-full max-w-full' />
+      <div className='mt-3 flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-md bg-black p-2'>
+        <canvas ref={canvasRef} className='h-auto max-h-full w-auto max-w-full' />
       </div>
     </div>
   )

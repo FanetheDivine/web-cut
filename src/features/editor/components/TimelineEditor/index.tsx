@@ -132,7 +132,10 @@ const TrackKindLabel: Record<TrackKind, string> = {
 export const TimelineEditor: FC<TimelineEditorProps> = (props) => {
   const { onBindScrollContainer, className, style } = props
 
-  const tracks = useEditorStore((s) => [...s.project.tracks].sort((a, b) => a.order - b.order))
+  const _tracks = useEditorStore((s) => s.project.tracks)
+  const tracks = useMemo(() => {
+    return _tracks.sort((a, b) => a.order - b.order)
+  }, [_tracks])
   const zoom = useEditorStore((s) => s.ui.zoom)
   const playheadMs = useEditorStore((s) => s.ui.playheadMs)
   const setPlayheadMs = useEditorStore((s) => s.setPlayheadMs)

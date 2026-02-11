@@ -1,4 +1,5 @@
 import { createStore, get, set } from 'idb-keyval'
+import { ensureIdbObjectStore } from '@/features/editor/indexedDb'
 import { EditorProjectSchema } from '@/features/editor/types'
 import type { EditorProject, EditorProjectDTO } from '@/features/editor/types'
 
@@ -28,10 +29,20 @@ export const createProjectStorage = (config?: {
   key?: string
 }): ProjectStorage => {
   const { dbName = 'web-cut', storeName = 'project', key = ProjectKey } = config ?? {}
-  const store = createStore(dbName, storeName)
+  let storeP: Promise<ReturnType<typeof createStore>> | null = null
+  const getStore = async () => {
+    if (!storeP) {
+      storeP = (async () => {
+        await ensureIdbObjectStore(dbName, storeName)
+        return createStore(dbName, storeName)
+      })()
+    }
+    return storeP
+  }
 
   return {
     load: async () => {
+      const store = await getStore()
       const raw = await get<unknown>(key, store)
       if (!raw) return null
       const parsed = EditorProjectSchema.safeParse(raw)
@@ -43,6 +54,7 @@ export const createProjectStorage = (config?: {
       return parsed.data as EditorProjectDTO as EditorProject
     },
     save: async (project) => {
+      const store = await getStore()
       await set(key, project, store)
     },
   }

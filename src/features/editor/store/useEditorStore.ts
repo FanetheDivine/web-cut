@@ -16,6 +16,7 @@ import {
 } from '@/features/editor/ops'
 import type { ResizeAnchor } from '@/features/editor/ops'
 import { createEmptyProject } from '@/features/editor/ops/projectOps'
+import { ensureIdbObjectStore } from '@/features/editor/indexedDb'
 import { createProjectStorage } from '@/features/editor/projectStorage'
 import { createResourceRepository } from '@/features/editor/resourceRepository'
 import type { ResourceRepository } from '@/features/editor/resourceRepository'
@@ -129,6 +130,17 @@ export const useEditorStore = create<EditorState & EditorActions>()(
     lastError: undefined,
 
     init: async () => {
+      /**
+       * 关键：先确保所需的 object store 都存在，再做任何 createStore/get/set。
+       *
+       * 否则会出现：
+       * - ProjectStorage 先打开了 dbName='web-cut' 的连接（读 project）
+       * - 后续 ResourceRepository 发现缺少 storeName='resource-repo'，尝试升级 version+1
+       * - 由于同页面已有旧连接未关闭，升级触发 `onblocked` -> “indexedDB upgrade blocked”
+       */
+      await ensureIdbObjectStore('web-cut', 'resource-repo')
+      await ensureIdbObjectStore('web-cut', 'project')
+
       // 初始化 repo（可扩展：注入不同实现）
       const repo = createResourceRepository()
 

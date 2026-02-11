@@ -1,5 +1,6 @@
 import { createStore, del, get, set } from 'idb-keyval'
 import { createId } from '@/features/editor/id'
+import { ensureIdbObjectStore } from '@/features/editor/indexedDb'
 import type { ResourceId, ResourceKind, ResourceMeta } from '@/features/editor/types'
 
 /**
@@ -82,15 +83,29 @@ export const createResourceRepository = (config?: {
   const { dbName = 'web-cut', storeName = 'resource-repo', keys: keysPatch } = config ?? {}
   const keys: RepoKeys = { ...DefaultKeys, ...(keysPatch ?? {}) }
 
-  const store = createStore(dbName, storeName)
+  // 关键：不要在这里立刻 createStore
+  // - 如果浏览器已有同名 DB，但缺少 storeName，createStore 会用旧版本连接并导致后续 transaction 报错
+  // - 我们先 ensure store 存在，再 createStore
+  let storeP: Promise<ReturnType<typeof createStore>> | null = null
+  const getStore = async () => {
+    if (!storeP) {
+      storeP = (async () => {
+        await ensureIdbObjectStore(dbName, storeName)
+        return createStore(dbName, storeName)
+      })()
+    }
+    return storeP
+  }
   const objectUrlCache = new Map<ResourceId, string>()
 
   const readIndex = async () => {
+    const store = await getStore()
     const index = await get<ResourceMeta[]>(keys.indexKey, store)
     return Array.isArray(index) ? index : []
   }
 
   const writeIndex = async (next: ResourceMeta[]) => {
+    const store = await getStore()
     await set(keys.indexKey, next, store)
   }
 
@@ -116,6 +131,7 @@ export const createResourceRepository = (config?: {
 
   return {
     put: async (file, patch) => {
+      const store = await getStore()
       const mime = file.type || 'application/octet-stream'
       const kind = detectResourceKind(mime)
       const id = createId('res')
@@ -143,11 +159,13 @@ export const createResourceRepository = (config?: {
     },
 
     getBlob: async (id) => {
+      const store = await getStore()
       const blob = await get<Blob>(keys.blobKey(id), store)
       return blob ?? null
     },
 
     getMeta: async (id) => {
+      const store = await getStore()
       const meta = await get<ResourceMeta>(keys.metaKey(id), store)
       return meta ?? null
     },
@@ -159,6 +177,7 @@ export const createResourceRepository = (config?: {
     },
 
     delete: async (id) => {
+      const store = await getStore()
       revokeObjectUrl(id)
       await del(keys.blobKey(id), store)
       await del(keys.metaKey(id), store)
@@ -166,6 +185,7 @@ export const createResourceRepository = (config?: {
     },
 
     clearAll: async () => {
+      const store = await getStore()
       // 原型实现：只根据 index 清理；若 index 丢失会遗留孤儿 key
       // TODO(可扩展): 未来可维护更严格的键空间或用更复杂 schema 避免孤儿数据
       const index = await readIndex()
@@ -177,6 +197,7 @@ export const createResourceRepository = (config?: {
     },
 
     getObjectUrl: async (id) => {
+      const store = await getStore()
       const cached = objectUrlCache.get(id)
       if (cached) return cached
 

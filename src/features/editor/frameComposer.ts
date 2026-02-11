@@ -1,4 +1,4 @@
-import type { EditorProject, Track, VideoClip } from '@/features/editor/types'
+import type { EditorProject, Track, TextClip, VideoClip } from '@/features/editor/types'
 
 /**
  * 帧合成（原型骨架）
@@ -44,6 +44,31 @@ type ActiveVideo = {
   sourceTimeMs: number
 }
 
+type ActiveText = {
+  track: Track
+  clip: TextClip
+}
+
+const findActiveTextClips = (project: EditorProject, playheadMs: number): ActiveText[] => {
+  const actives: ActiveText[] = []
+  const sortedTracks = [...project.tracks].sort((a, b) => a.order - b.order)
+
+  for (const track of sortedTracks) {
+    if (track.hidden) continue
+    if (track.kind !== 'text') continue
+
+    for (const clip of track.clips) {
+      if (clip.kind !== 'text') continue
+      const start = clip.startMs
+      const end = clip.startMs + clip.durationMs
+      if (playheadMs < start || playheadMs >= end) continue
+      actives.push({ track, clip })
+    }
+  }
+
+  return actives
+}
+
 const findActiveVideoClips = (project: EditorProject, playheadMs: number): ActiveVideo[] => {
   const actives: ActiveVideo[] = []
   const sortedTracks = [...project.tracks].sort((a, b) => a.order - b.order)
@@ -65,6 +90,28 @@ const findActiveVideoClips = (project: EditorProject, playheadMs: number): Activ
   }
 
   return actives
+}
+
+const drawTextClip = (ctx: CanvasRenderingContext2D, clip: TextClip) => {
+  const { fontFamily, fontSize, fontWeight, color, align } = clip.style
+  const { x, y, scale, rotateDeg } = clip.transform
+
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate((rotateDeg * Math.PI) / 180)
+  ctx.scale(scale, scale)
+
+  ctx.fillStyle = color
+  ctx.textAlign = align
+  // 你在 UI 里填写的是“左上角位置”，因此基线使用 top 更符合直觉
+  ctx.textBaseline = 'top'
+  ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`
+
+  // 按 align 决定 x 的含义：
+  // - left：x 是左上角 x
+  // - center/right：x 是文本锚点位置（基于 textAlign）
+  ctx.fillText(clip.text, 0, 0)
+  ctx.restore()
 }
 
 const seekVideoTo = async (video: HTMLVideoElement, timeSec: number) => {
@@ -114,28 +161,49 @@ export const composeFrame = async (args: ComposeFrameArgs) => {
     ctx.restore()
   }
 
-  const actives = findActiveVideoClips(project, playheadMs)
+  /**
+   * 叠加顺序：按 track.order 从小到大绘制
+   * - 视频：drawImage
+   * - 文本：fillText（支持 transform）
+   * - 音频：不参与画面合成
+   */
+  const sortedTracks = [...project.tracks].sort((a, b) => a.order - b.order)
 
-  for (const active of actives) {
-    const video = getVideoElement(active.clip.resourceId)
-    if (!video) continue
+  for (const track of sortedTracks) {
+    if (track.hidden) continue
+    const alpha = Math.max(0, Math.min(1, track.opacity))
 
-    // TODO(UI 协作): 确保 video 已加载 enough data
-    // - 若 UI 侧使用 <video preload="auto"> 并等待 canplay，可减少 composeFrame 抖动
+    if (track.kind === 'video') {
+      const actives = findActiveVideoClips(project, playheadMs).filter(
+        (x) => x.track.id === track.id,
+      )
+      for (const active of actives) {
+        const video = getVideoElement(active.clip.resourceId)
+        if (!video) continue
 
-    const timeSec = active.sourceTimeMs / 1000
-    await seekVideoTo(video, timeSec)
+        const timeSec = active.sourceTimeMs / 1000
+        await seekVideoTo(video, timeSec)
 
-    // 轨道透明度叠加
-    const alpha = Math.max(0, Math.min(1, active.track.opacity))
-    ctx.save()
-    ctx.globalAlpha = alpha
+        ctx.save()
+        ctx.globalAlpha = alpha
+        // 原型：直接铺满画布；未来可支持 clip.transform / aspect-fit 等
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        ctx.restore()
+      }
+    }
 
-    // 原型：直接铺满画布；未来可支持 clip.transform / aspect-fit 等
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-    ctx.restore()
+    if (track.kind === 'text') {
+      const actives = findActiveTextClips(project, playheadMs).filter(
+        (x) => x.track.id === track.id,
+      )
+      for (const active of actives) {
+        ctx.save()
+        ctx.globalAlpha = alpha
+        drawTextClip(ctx, active.clip)
+        ctx.restore()
+      }
+    }
   }
 
-  // TODO: 文本轨道绘制（按 track.order 叠加）
-  // TODO: 音频轨道不参与画面合成，但会影响最终导出
+  // TODO: 音频轨道不参与画面合成，但会影响最终导出（WebAudio / 导出合成）
 }

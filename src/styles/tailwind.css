@@ -27,7 +27,7 @@
   }
 
   html {
-    @apply overflow-auto min-w-80;
+    @apply min-w-80 overflow-auto;
   }
 
   body,

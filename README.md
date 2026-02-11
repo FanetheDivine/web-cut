@@ -1,4 +1,4 @@
-# react + antd + tailwindcss 项目模板
+# web-cut 在线视频剪辑工具
 
 - `ahooks` 常见 hook
 - `immer` & `use-immer` 处理复杂、嵌套的状态
